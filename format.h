@@ -465,10 +465,35 @@ typedef BasicCStringRef<wchar_t> WCStringRef;
 /**
   A formatting error such as invalid format string.
 */
+typedef void(*OnFormatError)(const class FormatError&);
+
 class FormatError : public std::runtime_error {
  public:
   explicit FormatError(CStringRef message)
   : std::runtime_error(message.c_str()) {}
+
+  static
+#ifdef FMT_HEADER_ONLY
+  inline
+#endif
+  void defaultOnFormatError(const FormatError& e);
+
+  static void setCallback(OnFormatError newFormatErrorCallback) {
+    if (newFormatErrorCallback)
+      getOnFormatError() = newFormatErrorCallback;
+    else
+      getOnFormatError() = defaultOnFormatError;
+  }
+
+  static void Throw(const FormatError& e) {
+    getOnFormatError()(e);
+  }
+
+private:
+  static OnFormatError& getOnFormatError() {
+    static OnFormatError onFormatError = defaultOnFormatError;
+    return onFormatError;
+  }
 };
 
 namespace internal {
@@ -1270,7 +1295,7 @@ class ArgVisitor {
   Result visit(const Arg &arg) {
     switch (arg.type) {
     default:
-      FMT_ASSERT(false, "invalid argument type");
+      FormatError::Throw(FormatError("invalid argument type"));
       return Result();
     case Arg::INT:
       return FMT_DISPATCH(visit_int(arg.int_value));
